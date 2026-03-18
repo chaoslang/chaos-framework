@@ -1,4 +1,4 @@
-#import "chaos_parser.h"
+#import "./src/chaos_parser.h"
 
 /*
 Customize syntax by editing the parse_* functions in this file.
@@ -30,7 +30,7 @@ inline Chaos_AST *parse_enum(Chaos_Parser *p);
 inline Chaos_AST *parse_statement(Chaos_Parser *p);
 inline Chaos_AST *parse_program(Chaos_Parser *p);
 
-#import "chaos_default_parser.h"
+#import "./src/chaos_default_parser.h"
 
 inline Chaos_AST *parse_primary(Chaos_Parser *p) {
   return chaos_parse_primary(p);

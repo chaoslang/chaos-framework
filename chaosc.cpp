@@ -13,8 +13,8 @@
 
 #define CHAOS_LEXER_IMPLEMENTATION
 #import "template_parser.h"
-#include "./chaos_backend_c.h"
-#include "./chaos_backend_js.h"
+#include "./src/chaos_backend_c.h"
+#include "./src/chaos_backend_js.h"
 
 std::string read_file(const std::string &path) {
   std::ifstream file(path, std::ios::binary);
