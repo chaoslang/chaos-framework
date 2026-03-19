@@ -11,7 +11,7 @@ make examples
 - `chaos_default_parser.h`: default parsing behavior (for inspiration).
 - `template_parser.h`: **only file you should touch** where you customize syntax.
 
-### Customize syntax in `template_parser.h`
+### Customize syntax in `template_parser.h` by looking at `chaos_default_parser.h`
 
 Basically just edit only the functions you care about having an alternative syntax for, say:
 - `parse_struct()`
