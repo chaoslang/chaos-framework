@@ -178,6 +178,12 @@ private:
              << " / " << get_temp_name(inst.b) << ";\n";
       break;
 
+    case IR_NEG:
+      output << indent() << lower_type_c(inst.type) << ' '
+             << get_temp_name(inst.dst) << " = -" << get_temp_name(inst.a)
+             << ";\n";
+      break;
+
     case IR_CMP_LT:
       output << indent() << "bool " << get_temp_name(inst.dst) << " = "
              << get_temp_name(inst.a) << " < " << get_temp_name(inst.b)
@@ -236,6 +242,100 @@ private:
       output << indent() << "printf(\"\\n\");\n";
       break;
     }
+    case IR_INTRINSIC_ALLOC:
+      output << indent() << "intptr_t " << get_temp_name(inst.dst)
+             << " = (intptr_t)malloc(" << get_temp_name(inst.a) << " * "
+             << inst.int_value << ");\n";
+      break;
+
+    case IR_INTRINSIC_FREE:
+      output << indent() << "free((void*)(intptr_t)" << get_temp_name(inst.a)
+             << ");\n";
+      break;
+
+    case IR_INTRINSIC_MEMCPY:
+      output << indent() << "memcpy((void*)(intptr_t)" << get_temp_name(inst.a)
+             << ", (void*)(intptr_t)" << get_temp_name(inst.b) << ", "
+             << get_temp_name(inst.args[0]) << ");\n";
+      break;
+
+    case IR_INTRINSIC_CAST:
+      output << indent() << lower_type_c(inst.type) << " "
+             << get_temp_name(inst.dst) << " = (" << lower_type_c(inst.type)
+             << ")" << get_temp_name(inst.a) << ";\n";
+      break;
+
+    case IR_INTRINSIC_DLOPEN: {
+      bool is_str = !inst.arg_types.empty() && inst.arg_types[0].kind == IR_STR;
+      std::string path_expr =
+          is_str ? (get_temp_name(inst.a) + ".data")
+                 : ("(const char*)(intptr_t)" + get_temp_name(inst.a));
+      output << indent() << "intptr_t " << get_temp_name(inst.dst)
+             << " = (intptr_t)dlopen(" << path_expr << ", RTLD_LAZY);\n";
+      break;
+    }
+
+    case IR_INTRINSIC_DLSYM: {
+      bool is_str = !inst.arg_types.empty() && inst.arg_types[0].kind == IR_STR;
+      std::string name_expr =
+          is_str ? (get_temp_name(inst.b) + ".data")
+                 : ("(const char*)(intptr_t)" + get_temp_name(inst.b));
+      output << indent() << "intptr_t " << get_temp_name(inst.dst)
+             << " = (intptr_t)dlsym((void*)(intptr_t)" << get_temp_name(inst.a)
+             << ", " << name_expr << ");\n";
+      break;
+    }
+
+    case IR_INTRINSIC_FFI_CALL: {
+      std::string dst = get_temp_name(inst.dst);
+      size_t nargs = inst.args.size();
+      output << indent() << "intptr_t " << dst << ";\n";
+      output << indent() << "{\n";
+      output << indent() << "  ffi_cif __cif_" << dst << ";\n";
+      if (nargs > 0) {
+        output << indent() << "  ffi_type *__atypes_" << dst << "[" << nargs
+               << "] = {";
+        for (size_t i = 0; i < nargs; i++) {
+          output << "&ffi_type_uint64";
+          if (i + 1 < nargs)
+            output << ", ";
+        }
+        output << "};\n";
+        output << indent() << "  uint64_t __avals_" << dst << "[" << nargs
+               << "] = {";
+        for (size_t i = 0; i < nargs; i++) {
+          if (inst.arg_types[i].kind == IR_STR)
+            output << "(uint64_t)(uintptr_t)" << get_temp_name(inst.args[i])
+                   << ".data";
+          else
+            output << "(uint64_t)" << get_temp_name(inst.args[i]);
+          if (i + 1 < nargs)
+            output << ", ";
+        }
+        output << "};\n";
+        output << indent() << "  void *__aptrs_" << dst << "[" << nargs
+               << "] = {";
+        for (size_t i = 0; i < nargs; i++) {
+          output << "&__avals_" << dst << "[" << i << "]";
+          if (i + 1 < nargs)
+            output << ", ";
+        }
+        output << "};\n";
+      }
+      output << indent() << "  uint64_t __ret_" << dst << " = 0;\n";
+      output << indent() << "  ffi_prep_cif(&__cif_" << dst
+             << ", FFI_DEFAULT_ABI, " << nargs << ", &ffi_type_uint64, "
+             << (nargs > 0 ? ("__atypes_" + dst) : "NULL") << ");\n";
+      output << indent() << "  ffi_call(&__cif_" << dst
+             << ", FFI_FN((void*)(intptr_t)" << get_temp_name(inst.a)
+             << "), &__ret_" << dst << ", "
+             << (nargs > 0 ? ("__aptrs_" + dst) : "NULL") << ");\n";
+      output << indent() << "  " << dst << " = (intptr_t)__ret_" << dst
+             << ";\n";
+      output << indent() << "}\n";
+      break;
+    }
+
     case IR_RET:
       output << indent() << "return " << get_temp_name(inst.a) << ";\n";
       break;
@@ -249,6 +349,11 @@ private:
                << " *)((char *)(intptr_t)" << get_temp_name(inst.a)
                << ") = " << get_temp_name(inst.b) << ";\n";
       }
+      break;
+
+    case IR_ADDR:
+      output << indent() << "intptr_t " << get_temp_name(inst.dst)
+             << " = (intptr_t)&" << inst.name << ";\n";
       break;
 
     case IR_LOAD:
@@ -305,8 +410,23 @@ public:
     output << indent() << "#include <stdint.h>\n";
     output << indent() << "#include <stdbool.h>\n";
     output << indent() << "#include <stddef.h>\n";
+    output << indent() << "#include <stdlib.h>\n";
+    output << indent() << "#include <string.h>\n";
+    output << indent() << "#include <dlfcn.h>\n";
+    output << indent() << "#include <ffi.h>\n";
     output << indent()
            << "typedef struct { size_t len; const char *data; } ChaosString;\n";
+
+    for (const auto &efn : ir.extern_decls) {
+      output << lower_type_c(efn.return_type) << " "
+             << mangle_symbol_name_c(efn.name) << "(";
+      for (size_t i = 0; i < efn.params.size(); i++) {
+        output << lower_type_c(efn.params[i].type);
+        if (i + 1 < efn.params.size())
+          output << ", ";
+      }
+      output << ");\n";
+    }
 
     for (const auto &fn : ir.functions) {
       output << lower_type_c(fn.return_type) << ' '

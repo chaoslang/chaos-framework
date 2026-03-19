@@ -2,6 +2,7 @@
 
 #include <cstdio>
 #include <memory>
+#include <string>
 
 typedef enum {
   AST_INT,
@@ -26,6 +27,7 @@ typedef enum {
   AST_MEMBER,
   AST_IMPORT,
   AST_MOD_DECL,
+  AST_INTRINSIC,
 
   AST_PROGRAM
 } Chaos_AST_Kind;
@@ -73,10 +75,11 @@ typedef struct Chaos_AST {
 
   struct {
     std::string_view name;
-    std::vector<std::pair<std::string_view, std::string_view>> params;
+    std::vector<std::pair<std::string_view, std::string>> params;
     std::string_view owner;
-    std::string_view return_type;
+    std::string return_type;
     Chaos_AST *body;
+    bool is_extern;
   } function;
 
   struct {
@@ -86,7 +89,7 @@ typedef struct Chaos_AST {
 
   struct {
     std::string_view name;
-    std::string_view type;
+    std::string type;
     Chaos_AST *init;
   } var_decl;
 
@@ -97,7 +100,7 @@ typedef struct Chaos_AST {
 
   struct {
     std::string_view name;
-    std::vector<std::pair<std::string_view, std::string_view>> fields;
+    std::vector<std::pair<std::string_view, std::string>> fields;
   } struct_decl;
 
   struct {
@@ -113,21 +116,28 @@ typedef struct Chaos_AST {
     std::string_view name;
   } mod_decl;
 
+  struct {
+    Chaos_AST *array;
+    Chaos_AST *index;
+  } index_expr;
+
+  struct {
+    std::string name;
+    std::string type_arg;
+    std::vector<Chaos_AST *> args;
+  } intrinsic;
+
   Chaos_AST()
       : kind(AST_PROGRAM), literal(), ident(),
         binary{TOK_INT, nullptr, nullptr}, unary{TOK_INT, nullptr}, block(),
         if_stmt{nullptr, nullptr, nullptr}, while_stmt{nullptr, nullptr},
-        function{std::string_view{},
-                 {},
-                 std::string_view{},
-                 std::string_view{},
-                 nullptr},
-        call{nullptr, {}},
-        var_decl{std::string_view{}, std::string_view{}, nullptr},
+        function{std::string_view{}, {},      std::string_view{},
+                 std::string{},      nullptr, false},
+        call{nullptr, {}}, var_decl{std::string_view{}, std::string{}, nullptr},
         assign{nullptr, nullptr}, enum_decl{std::string_view{}, {}},
         struct_decl{std::string_view{}, {}},
         member{nullptr, std::string_view{}}, import_decl{std::string_view{}},
-        mod_decl{std::string_view{}} {}
+        mod_decl{std::string_view{}}, index_expr{nullptr, nullptr} {}
 } Chaos_AST;
 
 typedef struct Chaos_Parser {

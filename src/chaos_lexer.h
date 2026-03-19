@@ -60,6 +60,13 @@ typedef enum {
   TOK_CONST,
   TOK_MOD,
 
+  TOK_AMP,
+  TOK_AT,
+  TOK_PLUS_EQ,
+  TOK_MINUS_EQ,
+  TOK_STAR_EQ,
+  TOK_SLASH_EQ,
+
   TOK_UNKNOWN
 
 } Chaos_Token_Kind;
@@ -129,6 +136,12 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
       lx->pos++;
       lx->line++;
       lx->column = 1;
+      continue;
+    }
+
+    if (c == '/' && lx->pos + 1 < src.length() && src[lx->pos + 1] == '/') {
+      while (lx->pos < src.length() && src[lx->pos] != '\n')
+        lx->pos++;
       continue;
     }
 
@@ -267,16 +280,46 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
       kind = TOK_RSQUARE;
       break;
     case '+':
-      kind = TOK_PLUS;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_PLUS_EQ;
+      } else {
+        kind = TOK_PLUS;
+      }
       break;
     case '-':
-      kind = TOK_MINUS;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_MINUS_EQ;
+      } else {
+        kind = TOK_MINUS;
+      }
       break;
     case '*':
-      kind = TOK_STAR;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_STAR_EQ;
+      } else {
+        kind = TOK_STAR;
+      }
       break;
     case '/':
-      kind = TOK_SLASH;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_SLASH_EQ;
+      } else {
+        kind = TOK_SLASH;
+      }
+      break;
+    case '&':
+      kind = TOK_AMP;
+      break;
+    case '@':
+      kind = TOK_AT;
       break;
     case '>':
       kind = TOK_GT;

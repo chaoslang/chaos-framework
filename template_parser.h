@@ -1,6 +1,6 @@
 #import "./src/chaos_parser.h"
 
-
+inline std::string parse_type(Chaos_Parser *p);
 inline Chaos_AST *parse_primary(Chaos_Parser *p);
 inline Chaos_AST *parse_postfix(Chaos_Parser *p, Chaos_AST *left);
 inline Chaos_AST *parse_factor(Chaos_Parser *p);
@@ -21,6 +21,7 @@ inline Chaos_AST *parse_mod_decl(Chaos_Parser *p);
 inline Chaos_AST *parse_enum(Chaos_Parser *p);
 inline Chaos_AST *parse_statement(Chaos_Parser *p);
 inline Chaos_AST *parse_program(Chaos_Parser *p);
+inline Chaos_AST *parse_extern_decl(Chaos_Parser *p);
 
 #import "./src/chaos_default_parser.h"
 
@@ -29,6 +30,10 @@ inline Chaos_AST *parse_program(Chaos_Parser *p);
 | Only Edit the Functions under this!!!!           |
 |==================================================|
 */
+
+inline std::string parse_type(Chaos_Parser *p) {
+  return chaos_parse_type(p);
+}
 
 inline Chaos_AST *parse_primary(Chaos_Parser *p) {
   return chaos_parse_primary(p);
@@ -93,6 +98,10 @@ inline Chaos_AST *parse_mod_decl(Chaos_Parser *p) {
 }
 
 inline Chaos_AST *parse_enum(Chaos_Parser *p) { return chaos_parse_enum(p); }
+
+inline Chaos_AST *parse_extern_decl(Chaos_Parser *p) {
+  return chaos_parse_extern_decl(p);
+}
 
 inline Chaos_AST *parse_statement(Chaos_Parser *p) {
   return chaos_parse_statement(p);

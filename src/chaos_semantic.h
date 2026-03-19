@@ -316,6 +316,7 @@ enum IR_Op {
   IR_CMP_GT,
 
   IR_NEG,
+  IR_ADDR,
 
   IR_JMP,
   IR_JMP_IF_FALSE,
@@ -323,6 +324,14 @@ enum IR_Op {
 
   IR_CALL,
   IR_INTRINSIC_PRINT,
+  IR_INTRINSIC_ALLOC,
+  IR_INTRINSIC_FREE,
+  IR_INTRINSIC_MEMCPY,
+  IR_INTRINSIC_CAST,
+  IR_INTRINSIC_DLOPEN,
+  IR_INTRINSIC_DLSYM,
+  IR_INTRINSIC_FFI_CALL,
+
   IR_RET
 };
 
@@ -362,6 +371,7 @@ struct IR_Function {
   std::vector<IR_Inst> code;
   std::vector<IR_Type> temp_types;
 
+  bool is_extern = false;
   int next_temp = 0;
 
   IR_Value new_temp(IR_Type type) {
@@ -372,4 +382,5 @@ struct IR_Function {
 
 struct IR_Program {
   std::vector<IR_Function> functions;
+  std::vector<IR_Function> extern_decls;
 };
