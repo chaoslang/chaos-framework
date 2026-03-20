@@ -39,6 +39,15 @@ fn make_color(r: u8, g: u8, b: u8, a: u8): Color {
   return c;
 }
 
+fn Color.set(self: Color, r: u8, g: u8, b: u8, a: u8): void {
+  self.r = r;
+  self.g = g;
+  self.b = b;
+  self.a = a;
+}
+
+
+
 fn light_gray(): Color {
   return make_color(245, 245, 245, 255);
 }

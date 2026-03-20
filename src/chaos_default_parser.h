@@ -43,7 +43,14 @@ inline std::string chaos_parse_type(Chaos_Parser *p) {
     std::fprintf(stderr, "Expected type name\n");
     return "i32";
   }
-  return std::string(p->advance()->text);
+  std::string name = std::string(p->advance()->text);
+  // Handle module-qualified types like raylib.Color
+  if (p->peek()->kind == TOK_DOT) {
+    p->advance(); // consume '.'
+    if (p->peek()->kind == TOK_IDENT)
+      name = std::string(p->advance()->text);
+  }
+  return name;
 }
 
 inline Chaos_AST *chaos_parse_extern_decl(Chaos_Parser *p) {
