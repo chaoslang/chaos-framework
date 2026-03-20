@@ -206,6 +206,24 @@ inline Chaos_AST *chaos_parse_postfix(Chaos_Parser *p, Chaos_AST *left) {
       continue;
     }
 
+    if (p->peek()->kind == TOK_PLUS_PLUS || p->peek()->kind == TOK_MINUS_MINUS) {
+      Chaos_Token_Kind op = p->advance()->kind;
+
+      Chaos_AST *one = chaos_make_ast(AST_INT);
+      one->literal = "1";
+
+      Chaos_AST *bin = chaos_make_ast(AST_BINARY);
+      bin->binary.l = left;
+      bin->binary.op = (op == TOK_PLUS_PLUS) ? TOK_PLUS : TOK_MINUS;
+      bin->binary.r = one;
+
+      Chaos_AST *assign = chaos_make_ast(AST_ASIGN);
+      assign->assign.target = left;
+      assign->assign.value = bin;
+      left = assign;
+      continue;
+    }
+
     break;
   }
 
@@ -290,6 +308,7 @@ inline Chaos_AST *chaos_parse_comparison(Chaos_Parser *p) {
   Chaos_AST *left = parse_additive(p);
 
   while (p->peek()->kind == TOK_GT || p->peek()->kind == TOK_LT ||
+         p->peek()->kind == TOK_GTE || p->peek()->kind == TOK_LTE ||
          p->peek()->kind == TOK_EQEQ || p->peek()->kind == TOK_NOT) {
     Chaos_Token_Kind op = p->advance()->kind;
     Chaos_AST *right = parse_additive(p);

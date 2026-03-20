@@ -42,6 +42,8 @@ typedef enum {
 
   TOK_GT,
   TOK_LT,
+  TOK_GTE,
+  TOK_LTE,
   TOK_EQEQ,
   TOK_JMP,
   TOK_JMP_FALSE,
@@ -66,6 +68,8 @@ typedef enum {
   TOK_MINUS_EQ,
   TOK_STAR_EQ,
   TOK_SLASH_EQ,
+  TOK_PLUS_PLUS,
+  TOK_MINUS_MINUS,
 
   TOK_UNKNOWN
 
@@ -284,6 +288,10 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
         lx->pos++;
         lx->column++;
         kind = TOK_PLUS_EQ;
+      } else if (lx->pos < src.length() && src[lx->pos] == '+') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_PLUS_PLUS;
       } else {
         kind = TOK_PLUS;
       }
@@ -293,6 +301,10 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
         lx->pos++;
         lx->column++;
         kind = TOK_MINUS_EQ;
+      } else if (lx->pos < src.length() && src[lx->pos] == '-') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_MINUS_MINUS;
       } else {
         kind = TOK_MINUS;
       }
@@ -322,10 +334,22 @@ CHAOSDEF void chaos_lexer_run(Chaos_Lexer *lx, std::string_view src) {
       kind = TOK_AT;
       break;
     case '>':
-      kind = TOK_GT;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_GTE;
+      } else {
+        kind = TOK_GT;
+      }
       break;
     case '<':
-      kind = TOK_LT;
+      if (lx->pos < src.length() && src[lx->pos] == '=') {
+        lx->pos++;
+        lx->column++;
+        kind = TOK_LTE;
+      } else {
+        kind = TOK_LT;
+      }
       break;
     case '=':
       if (lx->pos < src.length() && src[lx->pos] == '=') {

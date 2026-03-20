@@ -201,6 +201,18 @@ private:
              << ";\n";
       break;
 
+    case IR_CMP_LTE:
+      output << indent() << "bool " << get_temp_name(inst.dst) << " = "
+             << get_temp_name(inst.a) << " <= " << get_temp_name(inst.b)
+             << ";\n";
+      break;
+
+    case IR_CMP_GTE:
+      output << indent() << "bool " << get_temp_name(inst.dst) << " = "
+             << get_temp_name(inst.a) << " >= " << get_temp_name(inst.b)
+             << ";\n";
+      break;
+
     case IR_CMP_EQ:
       output << indent() << "bool " << get_temp_name(inst.dst) << " = "
              << get_temp_name(inst.a) << " == " << get_temp_name(inst.b)
@@ -354,6 +366,21 @@ private:
       output << indent() << "}\n";
       break;
     }
+
+    case IR_STR_LEN:
+      output << indent() << "size_t " << get_temp_name(inst.dst)
+             << " = " << get_temp_name(inst.a) << ".len;\n";
+      break;
+
+    case IR_STR_DATA:
+      output << indent() << "intptr_t " << get_temp_name(inst.dst)
+             << " = (intptr_t)" << get_temp_name(inst.a) << ".data;\n";
+      break;
+
+    case IR_INTRINSIC_SIZEOF:
+      output << indent() << "size_t " << get_temp_name(inst.dst)
+             << " = " << inst.int_value << ";\n";
+      break;
 
     case IR_RET:
       output << indent() << "return " << get_temp_name(inst.a) << ";\n";

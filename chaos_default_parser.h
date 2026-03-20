@@ -134,7 +134,7 @@ inline Chaos_AST *chaos_parse_primary(Chaos_Parser *p) {
     Chaos_AST *node = chaos_make_ast(AST_INTRINSIC);
     node->intrinsic.name = iname;
 
-    if (iname == "alloc" || iname == "cast") {
+    if (iname == "alloc" || iname == "cast" || iname == "sizeof") {
       node->intrinsic.type_arg = chaos_parse_type(p);
       if (p->peek()->kind != TOK_RPAREN)
         chaos_expect(p, TOK_COMMA, "Expected ',' after type argument");

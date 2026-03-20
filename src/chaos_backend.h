@@ -25,6 +25,32 @@ struct Lowering_Context {
   std::string new_label() { return "L" + std::to_string(label_counter++); }
 };
 
+std::string chaos_type_to_name(const Chaos_Type &t) {
+  if (t.kind == Chaos_Type::TYPE_VOID) return "void";
+  if (t.kind == Chaos_Type::TYPE_STRING) return "string";
+  if (t.kind == Chaos_Type::TYPE_POINTER) return "*" + chaos_type_to_name(*t.pointer());
+  if (t.kind == Chaos_Type::TYPE_STRUCT) return t.structure().name;
+  if (t.kind == Chaos_Type::TYPE_ENUM) return t.structure().name;
+  if (t.kind == Chaos_Type::TYPE_PRIMITIVE) {
+    switch (t.primitive()) {
+    case PRIM_I8:  return "i8";
+    case PRIM_I16: return "i16";
+    case PRIM_I32: return "i32";
+    case PRIM_I64: return "i64";
+    case PRIM_U8:  return "u8";
+    case PRIM_U16: return "u16";
+    case PRIM_U32: return "u32";
+    case PRIM_U64: return "u64";
+    case PRIM_F32: return "f32";
+    case PRIM_F64: return "f64";
+    case PRIM_BOOL: return "bool";
+    case PRIM_VOID: return "void";
+    default: return "i32";
+    }
+  }
+  return "i32";
+}
+
 std::shared_ptr<Chaos_Type> chaos_type_from_name(const std::string &name) {
   if (name == "int" || name == "i32")
     return Chaos_Type::make_primitive(PRIM_I32);
@@ -248,7 +274,7 @@ std::string expr_type_name(Chaos_AST *node, Lowering_Context &ctx) {
       if (sit != Lowering_Context::named_structs.end()) {
         for (auto &f : sit->second.fields) {
           if (f.name == std::string(node->member.field)) {
-            return lower_type(*f.type).kind == IR_I32 ? "i32" : "i32";
+            return chaos_type_to_name(*f.type);
           }
         }
       }
@@ -422,6 +448,20 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
   }
   if (node->kind == AST_MEMBER) {
     IR_Value base = lower_expr(node->member.object, ctx);
+
+    if (ctx.fn->temp_types[base].kind == IR_STR) {
+      std::string_view field = node->member.field;
+      IR_Op op = (field == "len") ? IR_STR_LEN : IR_STR_DATA;
+      IR_Type rtype = (field == "len") ? IR_Type{IR_U64} : IR_Type{IR_PTR};
+      IR_Value result = ctx.fn->new_temp(rtype);
+      IR_Inst inst{};
+      inst.op = op;
+      inst.dst = result;
+      inst.a = base;
+      inst.type = rtype;
+      ctx.fn->code.push_back(inst);
+      return result;
+    }
 
     const Struct_Data &struct_data =
         member_object_struct_data(node->member.object, ctx);
@@ -700,6 +740,18 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
       return t;
     }
 
+    if (iname == "sizeof") {
+      size_t sz = type_size_bytes(node->intrinsic.type_arg);
+      IR_Value t = ctx.fn->new_temp({IR_U64});
+      IR_Inst inst{};
+      inst.op = IR_INTRINSIC_SIZEOF;
+      inst.dst = t;
+      inst.int_value = (int64_t)sz;
+      inst.type = {IR_U64};
+      ctx.fn->code.push_back(inst);
+      return t;
+    }
+
     std::fprintf(stderr, "Unknown intrinsic: @%s\n", iname.c_str());
     return ctx.fn->new_temp({IR_VOID});
   }
@@ -827,6 +879,7 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     IR_Type result_type = promote_numeric_type(left_type, right_type);
 
     if (node->binary.op == TOK_LT || node->binary.op == TOK_GT ||
+        node->binary.op == TOK_LTE || node->binary.op == TOK_GTE ||
         node->binary.op == TOK_EQEQ || node->binary.op == TOK_NOT) {
       result_type = {IR_BOOL};
     }
@@ -859,6 +912,12 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
       break;
     case TOK_GT:
       inst.op = IR_CMP_GT;
+      break;
+    case TOK_LTE:
+      inst.op = IR_CMP_LTE;
+      break;
+    case TOK_GTE:
+      inst.op = IR_CMP_GTE;
       break;
     case TOK_EQEQ:
       inst.op = IR_CMP_EQ;
