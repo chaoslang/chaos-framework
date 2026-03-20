@@ -227,6 +227,14 @@ typedef struct Chaos_Type {
         return 8;
       case PRIM_BOOL:
         return 1;
+      case PRIM_U8:
+        return 1;
+      case PRIM_U16:
+        return 2;
+      case PRIM_U32:
+        return 4;
+      case PRIM_U64:
+        return 8;
       default:
         return 0;
       }
@@ -312,10 +320,12 @@ enum IR_Op {
   IR_DIV,
 
   IR_CMP_EQ,
+  IR_CMP_NEQ,
   IR_CMP_LT,
   IR_CMP_GT,
 
   IR_NEG,
+  IR_NOT,
   IR_ADDR,
 
   IR_JMP,
@@ -348,6 +358,7 @@ struct IR_Inst {
   std::string name;
   std::vector<IR_Value> args;
   std::vector<IR_Type> arg_types;
+  std::vector<size_t> arg_struct_sizes;
 
   int64_t int_value;
   double float_value;
@@ -380,7 +391,13 @@ struct IR_Function {
   }
 };
 
+struct IR_Global {
+  std::string name;
+  IR_Type type;
+};
+
 struct IR_Program {
   std::vector<IR_Function> functions;
   std::vector<IR_Function> extern_decls;
+  std::vector<IR_Global> globals;
 };

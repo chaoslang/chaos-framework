@@ -12,9 +12,9 @@
 #include <vector>
 
 #define CHAOS_LEXER_IMPLEMENTATION
-#import "template_parser.h"
 #include "./src/chaos_backend_c.h"
 #include "./src/chaos_backend_js.h"
+#import "template_parser.h"
 
 std::string read_file(const std::string &path) {
   std::ifstream file(path, std::ios::binary);
@@ -141,7 +141,24 @@ static bool c_to_exe(const std::string &c_source, const std::string &exe_path) {
     return false;
   }
 
-  std::string cmd = "gcc \"" + c_path + "\" -o \"" + exe_path + "\"";
+  char exe_buf[4096];
+  size_t exe_len = readlink("/proc/self/exe", exe_buf, sizeof(exe_buf) - 1);
+  std::string src_dir;
+  if (exe_len > 0) {
+    exe_buf[exe_len] = '\0';
+    src_dir = std::filesystem::path(exe_buf).parent_path().string() + "/src";
+  } else {
+    src_dir = "./src";
+  }
+  std::string cmd = "gcc \"" + c_path + "\" -o \"" + exe_path +
+                    "\""
+                    " -I\"" +
+                    src_dir +
+                    "\""
+                    " \"" +
+                    src_dir +
+                    "/libffi.a\""
+                    " -ldl";
   int rc = std::system(cmd.c_str());
 
   std::filesystem::remove(c_path);

@@ -232,6 +232,15 @@ inline Chaos_AST *chaos_parse_factor(Chaos_Parser *p) {
     return node;
   }
 
+  // Logical NOT
+  if (p->peek()->kind == TOK_BANG) {
+    p->advance();
+    Chaos_AST *node = chaos_make_ast(AST_UNARY);
+    node->unary.op = TOK_BANG;
+    node->unary.expr = parse_factor(p);
+    return node;
+  }
+
   Chaos_AST *primary = parse_primary(p);
   return parse_postfix(p, primary);
 }
@@ -354,10 +363,13 @@ inline Chaos_AST *chaos_parse_var_decl(Chaos_Parser *p) {
     array_prefix = "[" + size + "]";
   }
 
-  if (!chaos_expect(p, TOK_COLON, "Expected ':' after variable name"))
-    return nullptr;
-
-  std::string type = array_prefix + chaos_parse_type(p);
+  std::string type;
+  if (p->peek()->kind == TOK_COLON) {
+    p->advance();
+    type = array_prefix + chaos_parse_type(p);
+  } else {
+    type = array_prefix;
+  }
   Chaos_AST *init = p->match(TOK_EQUAL) ? parse_expression(p) : nullptr;
 
   chaos_expect(p, TOK_SEMI, "Expected ';' after variable declaration");

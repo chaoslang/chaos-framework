@@ -184,6 +184,11 @@ private:
              << ";\n";
       break;
 
+    case IR_NOT:
+      output << indent() << "bool " << get_temp_name(inst.dst) << " = !"
+             << get_temp_name(inst.a) << ";\n";
+      break;
+
     case IR_CMP_LT:
       output << indent() << "bool " << get_temp_name(inst.dst) << " = "
              << get_temp_name(inst.a) << " < " << get_temp_name(inst.b)
@@ -199,6 +204,12 @@ private:
     case IR_CMP_EQ:
       output << indent() << "bool " << get_temp_name(inst.dst) << " = "
              << get_temp_name(inst.a) << " == " << get_temp_name(inst.b)
+             << ";\n";
+      break;
+
+    case IR_CMP_NEQ:
+      output << indent() << "bool " << get_temp_name(inst.dst) << " = "
+             << get_temp_name(inst.a) << " != " << get_temp_name(inst.b)
              << ";\n";
       break;
 
@@ -304,9 +315,17 @@ private:
         output << indent() << "  uint64_t __avals_" << dst << "[" << nargs
                << "] = {";
         for (size_t i = 0; i < nargs; i++) {
-          if (inst.arg_types[i].kind == IR_STR)
-            output << "(uint64_t)(uintptr_t)" << get_temp_name(inst.args[i])
-                   << ".data";
+          size_t ssz = i < inst.arg_struct_sizes.size() ? inst.arg_struct_sizes[i] : 0;
+          if (ssz == 1)
+            output << "(uint64_t)*(uint8_t *)(intptr_t)" << get_temp_name(inst.args[i]);
+          else if (ssz == 2)
+            output << "(uint64_t)*(uint16_t *)(intptr_t)" << get_temp_name(inst.args[i]);
+          else if (ssz <= 4 && ssz > 0)
+            output << "(uint64_t)*(uint32_t *)(intptr_t)" << get_temp_name(inst.args[i]);
+          else if (ssz <= 8 && ssz > 0)
+            output << "(uint64_t)*(uint64_t *)(intptr_t)" << get_temp_name(inst.args[i]);
+          else if (inst.arg_types[i].kind == IR_STR)
+            output << "(uint64_t)(uintptr_t)" << get_temp_name(inst.args[i]) << ".data";
           else
             output << "(uint64_t)" << get_temp_name(inst.args[i]);
           if (i + 1 < nargs)
@@ -413,9 +432,13 @@ public:
     output << indent() << "#include <stdlib.h>\n";
     output << indent() << "#include <string.h>\n";
     output << indent() << "#include <dlfcn.h>\n";
-    output << indent() << "#include <ffi.h>\n";
+    output << indent() << "#include \"ffi.h\"\n";
     output << indent()
            << "typedef struct { size_t len; const char *data; } ChaosString;\n";
+
+    for (const auto &g : ir.globals) {
+      output << lower_type_c(g.type) << " " << g.name << " = 0;\n";
+    }
 
     for (const auto &efn : ir.extern_decls) {
       output << lower_type_c(efn.return_type) << " "

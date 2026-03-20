@@ -8,6 +8,7 @@
 
 struct Lowering_Context {
   IR_Function *fn;
+  std::string current_module;
   std::unordered_map<std::string, IR_Type> value_types;
   static std::unordered_map<std::string, Struct_Data> named_structs;
   std::unordered_map<std::string, std::string> value_struct_types;
@@ -15,6 +16,8 @@ struct Lowering_Context {
   std::unordered_map<std::string, std::string> value_type_names;
   static std::unordered_map<std::string, IR_Type> named_types;
   static std::unordered_map<std::string, IR_Type> named_function_returns;
+  static std::unordered_map<std::string, std::string> named_function_return_type_names;
+  static std::unordered_map<std::string, IR_Type> global_var_types;
   static std::unordered_set<std::string> module_names;
 
   int label_counter = 0;
@@ -47,7 +50,7 @@ std::shared_ptr<Chaos_Type> chaos_type_from_name(const std::string &name) {
     return Chaos_Type::make_primitive(PRIM_BOOL);
   if (name == "void")
     return Chaos_Type::make_void();
-  if (name == "string")
+  if (name == "string" || name == "str")
     return Chaos_Type::make_string();
   if (name == "ptr")
     return Chaos_Type::make_pointer(Chaos_Type::make_primitive(PRIM_U8));
@@ -145,7 +148,7 @@ IR_Type lower_type_name(const std::string &name) {
     return {IR_BOOL};
   if (name == "void")
     return {IR_VOID};
-  if (name == "string")
+  if (name == "string" || name == "str")
     return {IR_STR};
   if (name == "ptr")
     return {IR_PTR};
@@ -211,6 +214,26 @@ std::string expr_type_name(Chaos_AST *node, Lowering_Context &ctx) {
   if (node->kind == AST_INDEX) {
     std::string arr = expr_type_name(node->index_expr.array, ctx);
     return elem_type_name(arr);
+  }
+  if (node->kind == AST_CALL) {
+    std::string fn_name;
+    if (node->call.caller) {
+      if (node->call.caller->kind == AST_IDENT) {
+        fn_name = std::string(node->call.caller->ident);
+      } else if (node->call.caller->kind == AST_MEMBER) {
+        auto *m = node->call.caller;
+        if (m->member.object->kind == AST_IDENT) {
+          fn_name = std::string(m->member.object->ident) + "." +
+                    std::string(m->member.field);
+        }
+      }
+    }
+    if (!fn_name.empty()) {
+      auto it = Lowering_Context::named_function_return_type_names.find(fn_name);
+      if (it != Lowering_Context::named_function_return_type_names.end())
+        return it->second;
+    }
+    return "i32";
   }
   if (node->kind == AST_MEMBER) {
     std::string struct_name = "";
@@ -343,7 +366,7 @@ IR_Type lower_type_name(std::string_view name) {
     return {IR_BOOL};
   if (name == "void")
     return {IR_VOID};
-  if (name == "string")
+  if (name == "string" || name == "str")
     return {IR_STR};
 
   auto it = Lowering_Context::named_types.find(std::string(name));
@@ -476,6 +499,19 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     if (node->unary.op == TOK_AMP) {
       return lower_lvalue_addr(node->unary.expr, ctx);
     }
+
+    // logical not
+    if (node->unary.op == TOK_BANG) {
+      IR_Value val = lower_expr(node->unary.expr, ctx);
+      IR_Value t = ctx.fn->new_temp({IR_BOOL});
+      IR_Inst inst{};
+      inst.op = IR_NOT;
+      inst.dst = t;
+      inst.a = val;
+      inst.type = {IR_BOOL};
+      ctx.fn->code.push_back(inst);
+      return t;
+    }
   }
   if (node->kind == AST_INDEX) {
     IR_Value base = lower_expr(node->index_expr.array, ctx);
@@ -607,6 +643,63 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
       ctx.fn->code.push_back(inst);
       return t;
     }
+
+    if (iname == "dlopen") {
+      IR_Value path = lower_expr(node->intrinsic.args[0], ctx);
+      IR_Value t = ctx.fn->new_temp({IR_PTR});
+      IR_Inst inst{};
+      inst.op = IR_INTRINSIC_DLOPEN;
+      inst.dst = t;
+      inst.a = path;
+      inst.arg_types = {ctx.fn->temp_types[path]};
+      inst.type = {IR_PTR};
+      ctx.fn->code.push_back(inst);
+      return t;
+    }
+
+    if (iname == "dlsym") {
+      IR_Value handle = lower_expr(node->intrinsic.args[0], ctx);
+      IR_Value name = lower_expr(node->intrinsic.args[1], ctx);
+      IR_Value t = ctx.fn->new_temp({IR_PTR});
+      IR_Inst inst{};
+      inst.op = IR_INTRINSIC_DLSYM;
+      inst.dst = t;
+      inst.a = handle;
+      inst.b = name;
+      inst.arg_types = {ctx.fn->temp_types[name]};
+      inst.type = {IR_PTR};
+      ctx.fn->code.push_back(inst);
+      return t;
+    }
+
+    if (iname == "ffi_call") {
+      IR_Value fn_ptr = lower_expr(node->intrinsic.args[0], ctx);
+      IR_Value t = ctx.fn->new_temp({IR_PTR});
+      IR_Inst inst{};
+      inst.op = IR_INTRINSIC_FFI_CALL;
+      inst.dst = t;
+      inst.a = fn_ptr;
+      inst.type = {IR_PTR};
+      for (size_t i = 1; i < node->intrinsic.args.size(); i++) {
+        Chaos_AST *anode = node->intrinsic.args[i];
+        size_t struct_sz = 0;
+        if (anode->kind == AST_IDENT) {
+          auto it = ctx.value_struct_types.find(std::string(anode->ident));
+          if (it != ctx.value_struct_types.end()) {
+            auto sit = Lowering_Context::named_structs.find(it->second);
+            if (sit != Lowering_Context::named_structs.end())
+              struct_sz = struct_type_size_bytes(sit->second);
+          }
+        }
+        IR_Value arg = lower_expr(anode, ctx);
+        inst.args.push_back(arg);
+        inst.arg_types.push_back(ctx.fn->temp_types[arg]);
+        inst.arg_struct_sizes.push_back(struct_sz);
+      }
+      ctx.fn->code.push_back(inst);
+      return t;
+    }
+
     std::fprintf(stderr, "Unknown intrinsic: @%s\n", iname.c_str());
     return ctx.fn->new_temp({IR_VOID});
   }
@@ -617,6 +710,12 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
 
     if (node->call.caller->kind == AST_IDENT) {
       fn_name = std::string(node->call.caller->ident);
+      if (!ctx.current_module.empty() &&
+          Lowering_Context::module_names.count(ctx.current_module)) {
+        std::string qualified = ctx.current_module + "." + fn_name;
+        if (Lowering_Context::named_function_returns.count(qualified))
+          fn_name = qualified;
+      }
       for (Chaos_AST *arg : node->call.args)
         arg_values.push_back(lower_expr(arg, ctx));
     } else if (node->call.caller->kind == AST_MEMBER) {
@@ -701,6 +800,10 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
     auto it = ctx.value_types.find(std::string(node->ident));
     if (it != ctx.value_types.end()) {
       value_type = it->second;
+    } else {
+      auto git = Lowering_Context::global_var_types.find(std::string(node->ident));
+      if (git != Lowering_Context::global_var_types.end())
+        value_type = git->second;
     }
 
     IR_Value t = ctx.fn->new_temp(value_type);
@@ -759,6 +862,9 @@ IR_Value lower_expr(Chaos_AST *node, Lowering_Context &ctx) {
       break;
     case TOK_EQEQ:
       inst.op = IR_CMP_EQ;
+      break;
+    case TOK_NOT:
+      inst.op = IR_CMP_NEQ;
       break;
     default:
       assert(false && "Unknown binary op");
@@ -866,7 +972,18 @@ void lower_stmt(Chaos_AST *node, Lowering_Context &ctx) {
       store.op = IR_STORE;
       store.a = addr;
       store.b = value;
-      store.type = ctx.fn->temp_types[value];
+      IR_Type store_type = ctx.fn->temp_types[value];
+      if (target->member.object->kind == AST_IDENT) {
+        auto it = ctx.value_struct_types.find(std::string(target->member.object->ident));
+        if (it != ctx.value_struct_types.end()) {
+          auto sit = Lowering_Context::named_structs.find(it->second);
+          if (sit != Lowering_Context::named_structs.end()) {
+            auto ft = struct_field_type(sit->second, target->member.field);
+            if (ft) store_type = lower_type(*ft);
+          }
+        }
+      }
+      store.type = store_type;
       ctx.fn->code.push_back(store);
       return;
     }
@@ -960,11 +1077,16 @@ void lower_stmt(Chaos_AST *node, Lowering_Context &ctx) {
   if (node->kind == AST_VAR_DECL) {
     IR_Local local;
     local.name = std::string(node->var_decl.name);
-    local.type = lower_type_name(node->var_decl.type);
 
-    ctx.value_type_names[local.name] = node->var_decl.type;
+    std::string inferred_type = node->var_decl.type;
+    if (inferred_type.empty() && node->var_decl.init)
+      inferred_type = expr_type_name(node->var_decl.init, ctx);
 
-    const std::string &type_str = node->var_decl.type;
+    local.type = lower_type_name(inferred_type);
+
+    ctx.value_type_names[local.name] = inferred_type;
+
+    const std::string &type_str = inferred_type;
 
     if (!type_str.empty() && type_str[0] == '[') {
       auto ct = chaos_type_from_name(type_str);
@@ -1035,6 +1157,7 @@ IR_Function lower_function(Chaos_AST *fn_node) {
 
   Lowering_Context ctx;
   ctx.fn = &fn;
+  ctx.current_module = std::string(fn_node->function.owner);
 
   for (const auto &param : fn.params)
     ctx.value_types[param.name] = param.type;
@@ -1065,12 +1188,17 @@ std::unordered_map<std::string, IR_Type> Lowering_Context::named_types;
 std::unordered_map<std::string, Struct_Data> Lowering_Context::named_structs;
 std::unordered_map<std::string, IR_Type>
     Lowering_Context::named_function_returns;
+std::unordered_map<std::string, std::string>
+    Lowering_Context::named_function_return_type_names;
+std::unordered_map<std::string, IR_Type> Lowering_Context::global_var_types;
 std::unordered_set<std::string> Lowering_Context::module_names;
 
 IR_Program lower_program(Chaos_AST *program) {
   IR_Program ir;
 
   Lowering_Context::module_names.clear();
+  Lowering_Context::named_function_return_type_names.clear();
+  Lowering_Context::global_var_types.clear();
 
   for (auto *stmt : program->block.statements) {
     if (stmt->kind == AST_MOD_DECL) {
@@ -1099,6 +1227,15 @@ IR_Program lower_program(Chaos_AST *program) {
       continue;
     }
 
+    if (stmt->kind == AST_VAR_DECL) {
+      IR_Global g;
+      g.name = std::string(stmt->var_decl.name);
+      g.type = lower_type_name(stmt->var_decl.type);
+      Lowering_Context::global_var_types[g.name] = g.type;
+      ir.globals.push_back(g);
+      continue;
+    }
+
     if (stmt->kind == AST_FUNCTION) {
       std::string fn_name = stmt->function.owner.empty()
                                 ? std::string(stmt->function.name)
@@ -1106,6 +1243,8 @@ IR_Program lower_program(Chaos_AST *program) {
                                       std::string(stmt->function.name);
       Lowering_Context::named_function_returns[fn_name] =
           lower_type_name(stmt->function.return_type);
+      Lowering_Context::named_function_return_type_names[fn_name] =
+          stmt->function.return_type;
     }
   }
 
